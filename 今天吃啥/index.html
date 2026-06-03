@@ -1,0 +1,1878 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>今天吃啥 · 两阶段转盘</title>
+
+<!-- 高德地图安全密钥（必须第一行，在任何 SDK 脚本加载前设置） -->
+<script>
+  window._AMapSecurityConfig = {
+    securityJsCode: 'b28f8a5d6786ff7e8feab84248668904',
+  };
+  // SDK 加载完成回调（静态 script 标签触发）
+  window._amapLoaded = false;
+  window._amapCallbacks = [];
+  window.onAMapLoaded = function() {
+    window._amapLoaded = true;
+    var cbs = window._amapCallbacks;
+    window._amapCallbacks = [];
+    cbs.forEach(function(fn) { fn(); });
+  };
+</script>
+<!-- 静态加载高德地图 JS SDK（非动态注入，确保 file:// 下安全密钥通过验证） -->
+<script src="https://webapi.amap.com/maps?v=2.0&key=4b2b62a68e2b2d6208d1ae6282ddae89&plugin=AMap.PlaceSearch,AMap.Geolocation,AMap.CitySearch,AMap.Geocoder&callback=onAMapLoaded"></script>
+
+<style>
+  /* ============ 全局 & 暖色系主题 ============ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #FFF8F0;
+    --card-bg:   #FFFFFF;
+    --primary:   #FF7B54;
+    --primary-h: #FF5C2B;
+    --secondary: #FFB5A7;
+    --accent:    #FFD93D;
+    --accent2:   #FFE0B2;
+    --text:      #4A3728;
+    --text-dim:  #8B7355;
+    --border:    #F0D5C0;
+    --success:   #7BC67E;
+    --danger:    #E8734A;
+    --shadow:    0 4px 20px rgba(255, 123, 84, 0.12);
+    --radius:    18px;
+    --radius-sm: 12px;
+  }
+
+  body {
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 30px 16px 60px;
+  }
+
+  /* 背景装饰 */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 10%, rgba(255,217,61,0.18) 0%, transparent 55%),
+      radial-gradient(ellipse at 80% 90%, rgba(255,123,84,0.10) 0%, transparent 55%),
+      radial-gradient(ellipse at 50% 50%, rgba(255,181,167,0.08) 0%, transparent 60%);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ============ 主容器 ============ */
+  .app-container {
+    position: relative; z-index: 1;
+    width: 100%; max-width: 680px;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+
+  /* ============ 标题 ============ */
+  .title-block {
+    text-align: center;
+    animation: fadeInDown 0.7s ease-out;
+  }
+  .title-block .icon-row {
+    font-size: 48px;
+    margin-bottom: 4px;
+    animation: bounceIcon 2s ease-in-out infinite;
+  }
+  @keyframes bounceIcon {
+    0%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-10px); }
+    50% { transform: translateY(0); }
+  }
+  .title-block h1 {
+    font-size: 32px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--primary), #E8553A);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 2px;
+  }
+  .title-block .subtitle {
+    margin-top: 4px;
+    font-size: 14px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  /* ============ 位置提示栏 ============ */
+  .location-bar {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; flex-wrap: wrap;
+    background: #FFFBF6;
+    border: 1.5px solid var(--border);
+    border-radius: 28px;
+    padding: 10px 20px;
+    box-shadow: 0 2px 12px rgba(255,123,84,0.08);
+    animation: fadeInDown 0.5s ease-out;
+    transition: all 0.3s ease;
+  }
+  .location-bar.manual { border-color: var(--primary); background: #FFF5F0; }
+  .location-bar .loc-icon { font-size: 20px; }
+  .location-bar .loc-label { font-size: 13px; color: var(--text-dim); white-space: nowrap; }
+  .location-bar .loc-city {
+    font-size: 15px; font-weight: 700; color: var(--text);
+    max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .location-bar .loc-city.is-warning { color: var(--danger); }
+  .location-bar .loc-edit-wrap {
+    display: flex; align-items: center; gap: 6px;
+    transition: all 0.25s ease;
+  }
+  .location-bar .btn-loc-edit {
+    font-size: 12px; font-weight: 600;
+    color: var(--primary);
+    background: none; border: 1.5px solid var(--primary);
+    border-radius: 16px; padding: 4px 14px; cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+  }
+  .location-bar .btn-loc-edit:hover {
+    background: var(--primary); color: #fff;
+  }
+  .location-bar .loc-input {
+    font-family: inherit; font-size: 14px; font-weight: 600;
+    color: var(--text);
+    background: #FFF;
+    border: 2px solid var(--primary);
+    border-radius: 18px; padding: 6px 14px; width: 140px;
+    outline: none;
+    transition: all 0.25s ease;
+    box-shadow: 0 2px 10px rgba(255,123,84,0.12);
+  }
+  .location-bar .loc-input:focus { width: 180px; border-color: var(--primary-h); }
+  .location-bar .loc-input::placeholder { color: #C8B8A8; font-weight: 400; font-size: 13px; }
+  .location-bar .btn-loc-confirm {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: none; background: var(--primary); color: #fff;
+    font-size: 16px; cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .location-bar .btn-loc-confirm:hover { background: var(--primary-h); transform: scale(1.08); }
+  .location-bar .btn-loc-reset {
+    font-size: 11px; color: var(--text-dim); background: none; border: none;
+    cursor: pointer; text-decoration: underline;
+    font-family: inherit;
+    transition: color 0.2s;
+  }
+  .location-bar .btn-loc-reset:hover { color: var(--primary); }
+
+  @keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ============ 阶段卡片通用 ============ */
+  .card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    box-shadow: var(--shadow);
+    border: 1.5px solid var(--border);
+    transition: all 0.35s ease;
+  }
+
+  /* ============ 步骤指示器 ============ */
+  .step-indicator {
+    display: flex; justify-content: center; align-items: center; gap: 0;
+    margin-bottom: 4px;
+  }
+  .step-dot {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700;
+    background: var(--accent2); color: var(--text-dim);
+    transition: all 0.4s ease;
+    position: relative;
+  }
+  .step-dot.active {
+    background: var(--primary); color: #fff;
+    transform: scale(1.15);
+    box-shadow: 0 4px 14px rgba(255,123,84,0.35);
+  }
+  .step-dot.done {
+    background: var(--success); color: #fff;
+  }
+  .step-line {
+    width: 50px; height: 3px; border-radius: 2px;
+    background: var(--accent2);
+    transition: background 0.4s ease;
+  }
+  .step-line.done { background: var(--success); }
+
+  /* ============ 食物选择网格 ============ */
+  .food-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 12px;
+  }
+  .food-card {
+    position: relative;
+    background: #FFFBF6;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 16px 8px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .food-card:hover {
+    border-color: var(--secondary);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(255,123,84,0.13);
+  }
+  .food-card:active { transform: scale(0.96); }
+
+  .food-card .emoji { font-size: 36px; display: block; margin-bottom: 6px; transition: transform 0.25s ease; }
+  .food-card:hover .emoji { transform: scale(1.15); }
+
+  .food-card .label {
+    font-size: 15px; font-weight: 600;
+    color: var(--text);
+    transition: color 0.25s ease;
+  }
+
+  /* 选中状态 */
+  .food-card.selected {
+    border-color: var(--primary);
+    background: linear-gradient(135deg, #FFF3EE, #FFECE4);
+    box-shadow: 0 4px 18px rgba(255,123,84,0.20);
+    transform: translateY(-2px);
+  }
+  .food-card.selected .label { color: var(--primary-h); }
+
+  /* 选中角标 */
+  .food-card .check-badge {
+    position: absolute; top: -8px; right: -8px;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--primary); color: #fff;
+    font-size: 14px; display: flex; align-items: center; justify-content: center;
+    opacity: 0; transform: scale(0.5);
+    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+  }
+  .food-card.selected .check-badge {
+    opacity: 1; transform: scale(1);
+  }
+
+  /* 已达上限时，未选中卡片变灰 */
+  .food-grid.maxed .food-card:not(.selected) {
+    opacity: 0.45; cursor: not-allowed; pointer-events: none;
+  }
+
+  /* ============ 选择计数 & 按钮 ============ */
+  .selection-info {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 20px; gap: 16px; flex-wrap: wrap;
+  }
+  .counter {
+    font-size: 15px; font-weight: 600; color: var(--text-dim);
+    background: var(--accent2); padding: 8px 16px; border-radius: 20px;
+    white-space: nowrap;
+  }
+  .counter .num { color: var(--primary); font-size: 20px; }
+
+  .btn {
+    font-family: inherit; font-size: 16px; font-weight: 700;
+    padding: 12px 32px; border-radius: 28px; border: none;
+    cursor: pointer; letter-spacing: 1px;
+    transition: all 0.3s ease;
+    position: relative; overflow: hidden;
+  }
+  .btn-confirm {
+    background: linear-gradient(135deg, var(--primary), #FF5C2B);
+    color: #fff;
+    box-shadow: 0 6px 20px rgba(255,123,84,0.30);
+  }
+  .btn-confirm:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px rgba(255,123,84,0.40);
+  }
+  .btn-confirm:active:not(:disabled) { transform: scale(0.96); }
+  .btn-confirm:disabled {
+    background: #DDD; color: #AAA; cursor: not-allowed;
+    box-shadow: none;
+  }
+  .btn-confirm:disabled:hover { transform: none; }
+
+  .btn-back {
+    background: #FFF; color: var(--primary);
+    border: 2px solid var(--primary);
+  }
+  .btn-back:hover { background: #FFF3EE; }
+
+  .btn-sm {
+    font-size: 14px; padding: 10px 24px;
+    background: var(--accent); color: var(--text);
+    border: none; border-radius: 22px;
+    font-weight: 600; cursor: pointer;
+    transition: all 0.25s ease;
+  }
+  .btn-sm:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255,217,61,0.35); }
+  .btn-sm:active { transform: scale(0.96); }
+
+  /* 按钮脉冲提示 */
+  .btn-confirm.ready {
+    animation: pulseBtn 1.8s ease-in-out infinite;
+  }
+  @keyframes pulseBtn {
+    0%, 100% { box-shadow: 0 6px 20px rgba(255,123,84,0.30); }
+    50% { box-shadow: 0 6px 32px rgba(255,123,84,0.55); }
+  }
+
+  /* ============ 转盘弹窗（通用） ============ */
+  .wheel-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(74,55,40,0.55);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    animation: fadeIn 0.35s ease-out;
+  }
+  .wheel-overlay.fade-out {
+    animation: fadeOut 0.4s ease-out forwards;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+  .wheel-modal {
+    background: #FFFBF6;
+    border-radius: 24px;
+    padding: 32px 28px 28px;
+    text-align: center;
+    max-width: 460px; width: 92%;
+    box-shadow: 0 20px 60px rgba(74,55,40,0.25);
+    animation: popIn 0.45s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+  }
+  @keyframes popIn {
+    from { opacity: 0; transform: scale(0.8) translateY(40px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .wheel-modal h2 {
+    font-size: 22px; margin-bottom: 16px; color: var(--text);
+  }
+
+  .wheel-wrapper {
+    position: relative;
+    display: inline-block;
+    margin: 0 auto 16px;
+  }
+  /* 指针 */
+  .wheel-pointer {
+    position: absolute; top: -14px; left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 18px solid transparent;
+    border-right: 18px solid transparent;
+    border-top: 28px solid var(--primary);
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
+    z-index: 10;
+    transition: border-top-color 0.3s;
+  }
+  .wheel-pointer.shop { border-top-color: #5B8FF9; }
+
+  canvas.wheel-canvas {
+    border-radius: 50%;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+  }
+
+  .wheel-result {
+    font-size: 26px; font-weight: 700; color: var(--primary);
+    min-height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    margin: 8px 0 12px;
+    transition: all 0.3s;
+  }
+  .wheel-result .result-name { font-size: 24px; }
+  .wheel-result .result-addr {
+    font-size: 13px; color: var(--text-dim); font-weight: 400;
+    max-width: 280px; line-height: 1.4;
+  }
+  .wheel-result .emoji { font-size: 36px; }
+
+  .btn-spin {
+    background: linear-gradient(135deg, var(--accent), #F5C800);
+    color: var(--text);
+    font-size: 18px;
+    box-shadow: 0 6px 20px rgba(255,217,61,0.35);
+  }
+  .btn-spin:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px rgba(255,217,61,0.45);
+  }
+  .btn-spin:disabled {
+    background: #DDD; color: #AAA; cursor: not-allowed; box-shadow: none;
+  }
+  .btn-spin:active:not(:disabled) { transform: scale(0.96); }
+
+  .btn-spin.shop-theme {
+    background: linear-gradient(135deg, #5B8FF9, #3D6FDB);
+    color: #fff;
+    box-shadow: 0 6px 20px rgba(91,143,249,0.35);
+  }
+  .btn-spin.shop-theme:hover:not(:disabled) {
+    box-shadow: 0 10px 28px rgba(91,143,249,0.50);
+  }
+
+  /* ============ 第二阶段 ============ */
+  .phase2-container {
+    animation: fadeInUp 0.6s ease-out;
+  }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(40px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .result-hero {
+    text-align: center;
+    padding: 20px 0 12px;
+  }
+  .result-hero .big-emoji {
+    font-size: 80px;
+    display: block;
+    animation: popCelebrate 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+  }
+  @keyframes popCelebrate {
+    0% { opacity: 0; transform: scale(0) rotate(-20deg); }
+    60% { transform: scale(1.2) rotate(5deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  }
+  .result-hero .chosen-name {
+    font-size: 36px; font-weight: 800;
+    background: linear-gradient(135deg, var(--primary), #E8553A);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-top: 8px;
+  }
+  .result-hero .chosen-tagline {
+    font-size: 16px; color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* ============ 第二阶段：动态面板 ============ */
+  .phase2-panel {
+    background: linear-gradient(135deg, #FFF9F2, #FFF3E8);
+    border-radius: var(--radius);
+    padding: 24px 20px;
+    text-align: center;
+    margin-top: 8px;
+    min-height: 100px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px;
+    transition: all 0.4s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* 加载动画 */
+  .loading-row {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    color: var(--text-dim); font-size: 15px;
+  }
+  .loading-dots {
+    display: inline-flex; gap: 5px;
+  }
+  .loading-dots span {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--primary);
+    animation: dotBounce 1.4s ease-in-out infinite;
+  }
+  .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dotBounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  /* 搜索结果清单 */
+  .shop-list {
+    width: 100%; display: flex; flex-direction: column; gap: 10px;
+  }
+  .shop-item {
+    display: flex; align-items: center; gap: 12px;
+    background: #FFF; border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    border: 1.5px solid var(--border);
+    transition: all 0.25s ease;
+    text-align: left;
+  }
+  .shop-item .shop-rank {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent); color: var(--text);
+    font-weight: 700; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .shop-item:nth-child(1) .shop-rank { background: #FFD700; }
+  .shop-item:nth-child(2) .shop-rank { background: #E8E8E8; }
+  .shop-item:nth-child(3) .shop-rank { background: #E8C8A0; }
+  .shop-item .shop-info { flex: 1; min-width: 0; }
+  .shop-item .shop-name { font-weight: 700; font-size: 16px; color: var(--text); }
+  .shop-item .shop-addr {
+    font-size: 12px; color: var(--text-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .shop-item .shop-dist {
+    font-size: 13px; color: var(--primary); font-weight: 600; flex-shrink: 0;
+  }
+
+  /* 最终选定结果 */
+  .final-restaurant {
+    text-align: center; padding: 8px 0;
+  }
+  .final-restaurant .final-icon {
+    font-size: 56px;
+    animation: popCelebrate 0.6s cubic-bezier(0.68,-0.55,0.27,1.55);
+  }
+  .final-restaurant .final-name {
+    font-size: 26px; font-weight: 800; color: var(--primary-h);
+    margin-top: 6px;
+  }
+  .final-restaurant .final-addr {
+    font-size: 14px; color: var(--text-dim); margin-top: 4px;
+  }
+  .final-restaurant .final-dist {
+    display: inline-block; background: var(--accent2);
+    padding: 4px 14px; border-radius: 14px;
+    font-size: 13px; font-weight: 600; color: var(--text);
+    margin-top: 8px;
+  }
+
+  /* 错误/空状态 */
+  .status-msg {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    color: var(--text-dim);
+  }
+  .status-msg .status-icon { font-size: 48px; }
+  .status-msg .status-text { font-size: 15px; line-height: 1.8; }
+
+  /* ============ 装饰粒子 ============ */
+  .deco-dot {
+    position: absolute; border-radius: 50%;
+    background: rgba(255,181,167,0.35);
+    pointer-events: none;
+  }
+
+  /* ============ 响应式 ============ */
+  @media (max-width: 500px) {
+    .food-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .food-card { padding: 12px 4px 10px; }
+    .food-card .emoji { font-size: 28px; }
+    .food-card .label { font-size: 13px; }
+    .title-block h1 { font-size: 26px; }
+    .card { padding: 20px 14px; }
+    .wheel-modal { padding: 24px 16px 20px; }
+    .result-hero .big-emoji { font-size: 60px; }
+    .result-hero .chosen-name { font-size: 28px; }
+    canvas.wheel-canvas { width: 260px; height: 260px; }
+  }
+
+  /* 滚动条美化 */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: var(--secondary); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- ======= 标题 ======= -->
+  <div class="title-block">
+    <div class="icon-row">🥢</div>
+    <h1>今天吃啥</h1>
+    <p class="subtitle">两阶段转盘 · 专治选择困难</p>
+  </div>
+
+  <!-- ======= 位置提示栏 ======= -->
+  <div class="location-bar" id="locationBar">
+    <span class="loc-icon">📍</span>
+    <span class="loc-label">当前位置：</span>
+    <span class="loc-city" id="locCityDisplay">检测中…</span>
+    <span class="loc-edit-wrap" id="locEditWrap">
+      <button class="btn-loc-edit" id="btnLocEdit" title="手动修正位置">✏️ 修改</button>
+    </span>
+  </div>
+
+  <!-- ======= 步骤指示器 ======= -->
+  <div class="step-indicator">
+    <div class="step-dot active" id="stepDot1">1</div>
+    <div class="step-line" id="stepLine"></div>
+    <div class="step-dot" id="stepDot2">2</div>
+  </div>
+
+  <!-- ======= 第一阶段卡片 ======= -->
+  <div class="card" id="phase1Card">
+    <h2 style="font-size:18px; margin-bottom:4px; color:var(--text);">
+      🧑‍🍳 勾选 3~5 个今天想吃的类别
+    </h2>
+    <p style="font-size:13px; color:var(--text-dim); margin-bottom:18px;">
+      点击卡片选中，再次点击取消
+    </p>
+
+    <div class="food-grid" id="foodGrid"></div>
+
+    <div class="selection-info">
+      <div class="counter">已选 <span class="num" id="selCount">0</span> / 3~5 个</div>
+      <button class="btn btn-confirm" id="btnConfirm" disabled>✨ 开转！</button>
+    </div>
+  </div>
+
+  <!-- ======= 第二阶段卡片（初始隐藏） ======= -->
+  <div class="card phase2-container" id="phase2Card" style="display:none;">
+    <div class="result-hero">
+      <span class="big-emoji" id="resultEmoji">🎉</span>
+      <div class="chosen-name" id="resultName">---</div>
+      <p class="chosen-tagline" id="resultTagline">今天就它了！</p>
+    </div>
+
+    <!-- 动态面板：加载 → 搜索 → 结果 -->
+    <div class="phase2-panel" id="phase2Panel">
+      <!-- JS 动态填充 -->
+    </div>
+
+    <div style="text-align:center; margin-top:20px;">
+      <button class="btn btn-back" id="btnBack">🔄 再来一轮</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ======= 食物转盘弹窗 ======= -->
+<div class="wheel-overlay" id="wheelOverlay" style="display:none;">
+  <div class="wheel-modal">
+    <h2>🎡 命运之轮</h2>
+    <div class="wheel-wrapper">
+      <div class="wheel-pointer" id="wheelPointer"></div>
+      <canvas class="wheel-canvas" id="wheelCanvas" width="320" height="320"></canvas>
+    </div>
+    <div class="wheel-result" id="wheelResult"></div>
+    <button class="btn btn-spin" id="btnSpin">🎯 开始旋转</button>
+    <p style="font-size:12px; color:var(--text-dim); margin-top:10px;" id="wheelHint">
+      点击按钮，让命运来决定吧～
+    </p>
+  </div>
+</div>
+
+<!-- ======= 餐厅转盘弹窗 ======= -->
+<div class="wheel-overlay" id="shopWheelOverlay" style="display:none;">
+  <div class="wheel-modal">
+    <h2>🏪 去哪家店？</h2>
+    <div class="wheel-wrapper">
+      <div class="wheel-pointer shop" id="shopWheelPointer"></div>
+      <canvas class="wheel-canvas" id="shopWheelCanvas" width="320" height="320"></canvas>
+    </div>
+    <div class="wheel-result" id="shopWheelResult"></div>
+    <button class="btn btn-spin shop-theme" id="btnShopSpin">🎯 开始旋转</button>
+    <p style="font-size:12px; color:var(--text-dim); margin-top:10px;" id="shopWheelHint">
+      让命运帮你挑一家店！
+    </p>
+  </div>
+</div>
+
+<script>
+// ==================== 数据定义 ====================
+const FOOD_LIST = [
+  { id: 'hotpot',    emoji: '🍲', label: '火锅',     tagline: '热气腾腾，灵魂治愈' },
+  { id: 'chinese',   emoji: '🥡', label: '中餐',     tagline: '家的味道最暖心' },
+  { id: 'noodle',    emoji: '🍜', label: '米线',     tagline: '吸溜一口超满足' },
+  { id: 'sushi',     emoji: '🍣', label: '寿司',     tagline: '精致日料小确幸' },
+  { id: 'bbq',       emoji: '🍖', label: '烧烤',     tagline: '烟火气里的快乐' },
+  { id: 'fastfood',  emoji: '🍔', label: '快餐',     tagline: '高效管饱不纠结' },
+  { id: 'pizza',     emoji: '🍕', label: '披萨',     tagline: '拉丝芝士就是力量' },
+  { id: 'taco',      emoji: '🌮', label: '塔可',     tagline: '一口墨西哥阳光' },
+  { id: 'pasta',     emoji: '🍝', label: '意面',     tagline: '碳水带来的幸福感' },
+  { id: 'salad',     emoji: '🥗', label: '轻食',     tagline: '轻盈一餐无负担' },
+  { id: 'bento',     emoji: '🍱', label: '便当',     tagline: '方寸之间的美味' },
+  { id: 'malatang',  emoji: '🍲', label: '麻辣烫',   tagline: '一人食也精彩' },
+  { id: 'dumpling',  emoji: '🥟', label: '饺子',     tagline: '皮薄馅大真过瘾' },
+  { id: 'chicken',   emoji: '🍗', label: '炸鸡',     tagline: '咔嚓一声烦恼消' },
+  { id: 'curry',     emoji: '🍛', label: '咖喱',     tagline: '浓郁酱汁拌饭绝配' },
+];
+
+// ==================== 状态 ====================
+let selectedIds = new Set();
+const MIN_SELECT = 3;
+const MAX_SELECT = 5;
+
+// ==================== DOM 引用 ====================
+const foodGrid       = document.getElementById('foodGrid');
+const selCountEl     = document.getElementById('selCount');
+const btnConfirm     = document.getElementById('btnConfirm');
+const phase1Card     = document.getElementById('phase1Card');
+const phase2Card     = document.getElementById('phase2Card');
+const phase2Panel    = document.getElementById('phase2Panel');
+const resultEmoji    = document.getElementById('resultEmoji');
+const resultName     = document.getElementById('resultName');
+const resultTagline  = document.getElementById('resultTagline');
+const btnBack        = document.getElementById('btnBack');
+const stepDot1       = document.getElementById('stepDot1');
+const stepDot2       = document.getElementById('stepDot2');
+const stepLine       = document.getElementById('stepLine');
+
+// 食物转盘
+const wheelOverlay   = document.getElementById('wheelOverlay');
+const wheelCanvas    = document.getElementById('wheelCanvas');
+const wheelResult    = document.getElementById('wheelResult');
+const btnSpin        = document.getElementById('btnSpin');
+const wheelHint      = document.getElementById('wheelHint');
+const ctx            = wheelCanvas.getContext('2d');
+
+let wheelItems       = [];
+let wheelAngle       = 0;
+let isSpinning       = false;
+let spinAnimId       = null;
+
+// 餐厅转盘
+const shopWheelOverlay = document.getElementById('shopWheelOverlay');
+const shopWheelCanvas  = document.getElementById('shopWheelCanvas');
+const shopWheelResult  = document.getElementById('shopWheelResult');
+const btnShopSpin      = document.getElementById('btnShopSpin');
+const shopWheelHint    = document.getElementById('shopWheelHint');
+const shopCtx          = shopWheelCanvas.getContext('2d');
+
+let shopWheelItems     = [];     // [{name, address, distance, ...}]
+let shopWheelAngle     = 0;
+let isShopSpinning     = false;
+let shopSpinAnimId     = null;
+let chosenFoodId       = null;   // 第一阶段抽中的食物 ID
+
+// ==================== 位置状态 ====================
+let locationMode = 'auto';        // 'auto' | 'manual'
+let detectedCity = '';            // 高德自动检测到的城市名
+let detectedCoords = null;        // {lng, lat} 自动检测到的坐标
+let manualCityName = '';          // 用户手动输入的城市名
+let manualCoords = null;          // {lng, lat} 用户城市地理编码后的坐标
+
+// 位置栏 DOM
+const locationBar    = document.getElementById('locationBar');
+const locCityDisplay = document.getElementById('locCityDisplay');
+const btnLocEdit     = document.getElementById('btnLocEdit');
+const locEditWrap    = document.getElementById('locEditWrap');
+
+// ==================== 高德地图初始化 ====================
+let amapReady = false;
+let placeSearch = null;
+let geolocation = null;
+let citySearch = null;
+let geocoder = null;
+
+function loadAmapSDK() {
+  return new Promise(function(resolve, reject) {
+    if (amapReady && placeSearch && geolocation && citySearch) {
+      resolve();
+      return;
+    }
+
+    // SDK 已通过静态 script 标签加载完成
+    if (window._amapLoaded && window.AMap && window.AMap.PlaceSearch) {
+      initAmapServices();
+      resolve();
+      return;
+    }
+
+    // SDK 还没加载完，加入回调队列等待
+    var timeout = setTimeout(function() {
+      reject(new Error('高德地图 SDK 加载超时，请检查网络连接'));
+    }, 15000);
+
+    window._amapCallbacks.push(function() {
+      clearTimeout(timeout);
+      try {
+        initAmapServices();
+        resolve();
+      } catch(e) {
+        reject(e);
+      }
+    });
+  });
+}
+
+function initAmapServices() {
+  console.log('[今天吃啥] 高德 SDK 加载成功，初始化服务...');
+
+  placeSearch = new AMap.PlaceSearch({
+    pageSize: 10,
+    pageIndex: 1,
+    citylimit: false,
+  });
+
+  geolocation = new AMap.Geolocation({
+    enableHighAccuracy: true,
+    timeout: 10000,
+    noIpLocate: false,
+    noGeoLocation: false,
+  });
+
+  citySearch = new AMap.CitySearch();
+  geocoder = new AMap.Geocoder();
+
+  amapReady = true;
+  console.log('[今天吃啥] PlaceSearch / Geolocation / CitySearch / Geocoder 初始化完成');
+}
+
+// ==================== 渲染食物卡片 ====================
+function renderFoodCards() {
+  foodGrid.innerHTML = '';
+  FOOD_LIST.forEach(function(food) {
+    var card = document.createElement('div');
+    card.className = 'food-card';
+    if (selectedIds.has(food.id)) card.classList.add('selected');
+    card.dataset.foodId = food.id;
+    card.innerHTML =
+      '<div class="check-badge">✓</div>' +
+      '<span class="emoji">' + food.emoji + '</span>' +
+      '<span class="label">' + food.label + '</span>';
+    card.addEventListener('click', function() { toggleFood(food.id); });
+    foodGrid.appendChild(card);
+  });
+  updateGridMaxState();
+}
+
+function toggleFood(id) {
+  if (selectedIds.has(id)) {
+    selectedIds.delete(id);
+  } else {
+    if (selectedIds.size >= MAX_SELECT) return;
+    selectedIds.add(id);
+  }
+  document.querySelectorAll('.food-card').forEach(function(card) {
+    var fid = card.dataset.foodId;
+    if (selectedIds.has(fid)) {
+      card.classList.add('selected');
+    } else {
+      card.classList.remove('selected');
+    }
+  });
+  updateGridMaxState();
+  updateConfirmButton();
+}
+
+function updateGridMaxState() {
+  if (selectedIds.size >= MAX_SELECT) {
+    foodGrid.classList.add('maxed');
+  } else {
+    foodGrid.classList.remove('maxed');
+  }
+}
+
+function updateConfirmButton() {
+  var n = selectedIds.size;
+  selCountEl.textContent = n;
+  if (n >= MIN_SELECT && n <= MAX_SELECT) {
+    btnConfirm.disabled = false;
+    btnConfirm.classList.add('ready');
+  } else {
+    btnConfirm.disabled = true;
+    btnConfirm.classList.remove('ready');
+  }
+}
+
+// ==================== 通用 Canvas 转盘绘制 ====================
+function drawWheelGeneric(context, canvas, items, angle, colors, getLabelFn, getSubFn) {
+  var W = canvas.width;
+  var H = canvas.height;
+  var cx = W / 2;
+  var cy = H / 2;
+  var radius = 140;
+  var n = items.length;
+  var sliceAngle = (2 * Math.PI) / n;
+
+  context.clearRect(0, 0, W, H);
+
+  // 扇形
+  for (var i = 0; i < n; i++) {
+    var startAngle = angle + i * sliceAngle;
+    var endAngle   = startAngle + sliceAngle;
+
+    context.beginPath();
+    context.moveTo(cx, cy);
+    context.arc(cx, cy, radius, startAngle, endAngle);
+    context.closePath();
+    context.fillStyle = colors[i % colors.length];
+    context.fill();
+    context.strokeStyle = '#FFF';
+    context.lineWidth = 2.5;
+    context.stroke();
+  }
+
+  // 文字标签
+  context.save();
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.font = '600 15px "PingFang SC","Microsoft YaHei","Segoe UI",sans-serif';
+  context.fillStyle = '#4A3728';
+
+  for (var j = 0; j < n; j++) {
+    var midAngle = angle + j * sliceAngle + sliceAngle / 2;
+    var textR = radius * 0.62;
+    var tx = cx + Math.cos(midAngle) * textR;
+    var ty = cy + Math.sin(midAngle) * textR;
+
+    context.save();
+    context.translate(tx, ty);
+    context.rotate(midAngle + Math.PI / 2);
+
+    var label = getLabelFn ? getLabelFn(items[j], j) : items[j].label;
+    // 餐厅名字可能很长，截断
+    if (label.length > 6) {
+      label = label.substring(0, 5) + '…';
+    }
+
+    // 如果 items 数量多(如 7-10个)，缩小字体
+    if (n >= 7) {
+      context.font = '600 11px "PingFang SC","Microsoft YaHei","Segoe UI",sans-serif';
+    }
+    context.fillText(label, 0, 0);
+    context.restore();
+
+    // 副文字（emoji 或小标签）
+    if (getSubFn) {
+      var emojiR = radius * 0.32;
+      var ex = cx + Math.cos(midAngle) * emojiR;
+      var ey = cy + Math.sin(midAngle) * emojiR;
+      context.font = '20px sans-serif';
+      context.fillText(getSubFn(items[j], j), ex, ey);
+    }
+  }
+  context.restore();
+
+  // 中心装饰圆
+  context.beginPath();
+  context.arc(cx, cy, 22, 0, 2 * Math.PI);
+  context.fillStyle = '#FFF';
+  context.fill();
+  context.strokeStyle = n > 5 ? '#5B8FF9' : '#FF7B54';
+  context.lineWidth = 3;
+  context.stroke();
+
+  context.fillStyle = n > 5 ? '#5B8FF9' : '#FF7B54';
+  context.font = '700 12px "PingFang SC","Microsoft YaHei",sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText('吃', cx, cy);
+}
+
+// ==================== 食物转盘 ====================
+const WHEEL_COLORS = [
+  '#FF7B54', '#FFB5A7', '#FFD93D', '#FF9A76', '#F9C7B7',
+  '#FFE0B2', '#FFAB76', '#FFD1A9', '#FEC89A', '#FADAC8',
+];
+
+function drawFoodWheel(angle) {
+  drawWheelGeneric(ctx, wheelCanvas, wheelItems, angle, WHEEL_COLORS,
+    function(item) { return item.label; },
+    function(item) { return item.emoji; }
+  );
+}
+
+function showFoodWheel() {
+  wheelItems = FOOD_LIST.filter(function(f) { return selectedIds.has(f.id); });
+  wheelAngle = 0;
+  isSpinning = false;
+  wheelResult.innerHTML = '';
+  // 【Bug修复】必须清除上一次的残留 foodId，否则未旋转就关闭会拿到旧数据
+  wheelResult.dataset.foodId = '';
+  wheelHint.textContent = '点击按钮，让命运来决定吧～';
+  btnSpin.disabled = false;
+  btnSpin.textContent = '🎯 开始旋转';
+  console.log('[今天吃啥] 食物转盘已打开，选项:', wheelItems.map(function(it){return it.label;}).join('、'));
+  drawFoodWheel(0);
+  wheelOverlay.style.display = 'flex';
+  wheelOverlay.classList.remove('fade-out');
+}
+
+function hideFoodWheel() {
+  wheelOverlay.classList.add('fade-out');
+  setTimeout(function() {
+    wheelOverlay.style.display = 'none';
+  }, 400);
+}
+
+function spinFoodWheel() {
+  if (isSpinning) return;
+  isSpinning = true;
+  btnSpin.disabled = true;
+  btnSpin.textContent = '🌀 旋转中…';
+  wheelHint.textContent = '命运在转动…';
+  wheelResult.innerHTML = '';
+  // 清除旧数据，确保本轮旋转必须完成才能使用
+  wheelResult.dataset.foodId = '';
+
+  var n = wheelItems.length;
+  var targetIndex = Math.floor(Math.random() * n);
+  var targetItem = wheelItems[targetIndex];
+
+  // 指针在Canvas中位于 12 点钟方向 = -π/2 (等价于 3π/2)
+  var pointerAngle = -Math.PI / 2;
+  var sliceAngle = (2 * Math.PI) / n;
+
+  // 目标扇区中点在当前基准角度下的位置
+  var targetSliceMid = targetIndex * sliceAngle + sliceAngle / 2;
+
+  // 计算需要将基准角度旋转到多少，才能使目标扇区中点对准指针
+  // 公式：newBaseAngle + targetSliceMid ≡ pointerAngle (mod 2π)
+  // 即：newBaseAngle = pointerAngle - targetSliceMid
+  var newBaseAngle = pointerAngle - targetSliceMid;
+
+  // 确保是从当前位置向前转（不倒退）
+  // 先算当前位置等效的 [0, 2π) 角度
+  var currentNorm = ((wheelAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  var targetNorm = ((newBaseAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+  // 在当前"圈"内，目标角度至少要比当前多一点点
+  var fullRounds = Math.floor(wheelAngle / (2 * Math.PI));
+  var targetAngle = fullRounds * 2 * Math.PI + targetNorm;
+  if (targetAngle <= wheelAngle + 0.01) {
+    targetAngle += 2 * Math.PI;
+  }
+
+  // 加上随机 5~8 个完整圈（视觉效果）
+  var extraTurns = (5 + Math.floor(Math.random() * 4)) * 2 * Math.PI;
+  targetAngle += extraTurns;
+
+  // 【验证日志】记录本次旋转目标
+  console.log(
+    '[今天吃啥] 🎯 转盘目标: 第' + (targetIndex + 1) + '个扇区 → 「' + targetItem.label + '」',
+    '| 扇区中点角:', (targetSliceMid * 180 / Math.PI).toFixed(1) + '°',
+    '| 指针角:', (pointerAngle * 180 / Math.PI).toFixed(1) + '°',
+    '| 新基准角:', (targetNorm * 180 / Math.PI).toFixed(1) + '°',
+    '| 总旋转:', (totalDelta(targetAngle) / (2 * Math.PI)).toFixed(2) + '圈'
+  );
+
+  var startAngle = wheelAngle;
+  var totalDelta = targetAngle - startAngle;
+  var duration = 3200 + Math.random() * 800;
+  var startTime = performance.now();
+
+  function totalDelta(ta) { return ta - startAngle; }
+
+  function animate(now) {
+    var elapsed = now - startTime;
+    var progress = Math.min(elapsed / duration, 1.0);
+    // ease-out 四次方缓出
+    var eased = 1 - Math.pow(1 - progress, 4);
+    var currentAngle = startAngle + totalDelta * eased;
+    wheelAngle = currentAngle;
+    drawFoodWheel(currentAngle);
+
+    if (progress < 1.0) {
+      spinAnimId = requestAnimationFrame(animate);
+    } else {
+      // —— 旋转结束 ——
+      wheelAngle = currentAngle;
+      isSpinning = false;
+      spinAnimId = null;
+      btnSpin.textContent = '🔄 再转一次';
+      btnSpin.disabled = false;
+      wheelHint.textContent = '不满意？再转一次，或点击外面进入下一步～';
+
+      // —— 最终验证：检查指针实际指向哪个扇区 ——
+      var finalNorm = ((currentAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      var actualMid = (pointerAngle - finalNorm + 2 * Math.PI) % (2 * Math.PI);
+      var actualIndex = Math.floor(actualMid / sliceAngle);
+      if (actualIndex >= n) actualIndex = n - 1;
+      if (actualIndex < 0) actualIndex = 0;
+
+      console.log(
+        '[今天吃啥] ✅ 旋转结束:',
+        '目标=「' + targetItem.label + '」(idx=' + targetIndex + ')',
+        '| 指针实际命中=「' + wheelItems[actualIndex].label + '」(idx=' + actualIndex + ')',
+        targetIndex === actualIndex ? '✓ 匹配!' : '✗ 不匹配!'
+      );
+
+      // 显示结果 —— 始终以 targetIndex 为准（数学保证正确）
+      wheelResult.innerHTML = '<span class="emoji">' + targetItem.emoji + '</span> ' + targetItem.label;
+      wheelResult.style.animation = 'none';
+      void wheelResult.offsetWidth;
+      wheelResult.style.animation = 'popCelebrate 0.5s cubic-bezier(0.68,-0.55,0.27,1.55)';
+      wheelResult.dataset.foodId = targetItem.id;
+    }
+  }
+
+  spinAnimId = requestAnimationFrame(animate);
+}
+
+// 食物转盘事件
+wheelOverlay.addEventListener('click', function(e) {
+  if (e.target === wheelOverlay) {
+    var resultId = wheelResult.dataset.foodId;
+    hideFoodWheel();
+    if (resultId && !isSpinning) {
+      goToPhase2(resultId);
+    }
+  }
+});
+
+btnSpin.addEventListener('click', function() {
+  if (isSpinning) return;
+  var resultId = wheelResult.dataset.foodId;
+  if (resultId && btnSpin.textContent.indexOf('再转一次') >= 0) {
+    wheelResult.dataset.foodId = '';
+    wheelResult.innerHTML = '';
+    btnSpin.textContent = '🌀 旋转中…';
+    spinFoodWheel();
+  } else {
+    spinFoodWheel();
+  }
+});
+
+// ==================== 餐厅转盘 ====================
+const SHOP_WHEEL_COLORS = [
+  '#5B8FF9', '#61DDAA', '#F6BD16', '#E8684A', '#6DC8EC',
+  '#9270CA', '#FF9D4D', '#269A99', '#FF99C3', '#5AD8A6',
+];
+
+function drawShopWheel(angle) {
+  drawWheelGeneric(shopCtx, shopWheelCanvas, shopWheelItems, angle, SHOP_WHEEL_COLORS,
+    function(item) { return item.name; },
+    function(item, i) {
+      // 用序号 emoji 代替
+      var nums = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+      return nums[i] || '🏪';
+    }
+  );
+}
+
+function showShopWheel() {
+  shopWheelAngle = 0;
+  isShopSpinning = false;
+  shopWheelResult.innerHTML = '';
+  // 【Bug修复】清除上一次的残留数据
+  shopWheelResult.dataset.chosenIndex = '';
+  shopWheelHint.textContent = '让命运帮你挑一家店！';
+  btnShopSpin.disabled = false;
+  btnShopSpin.textContent = '🎯 开始旋转';
+  drawShopWheel(0);
+  shopWheelOverlay.style.display = 'flex';
+  shopWheelOverlay.classList.remove('fade-out');
+}
+
+function hideShopWheel() {
+  shopWheelOverlay.classList.add('fade-out');
+  setTimeout(function() {
+    shopWheelOverlay.style.display = 'none';
+  }, 400);
+}
+
+function spinShopWheel() {
+  if (isShopSpinning) return;
+  isShopSpinning = true;
+  btnShopSpin.disabled = true;
+  btnShopSpin.textContent = '🌀 旋转中…';
+  shopWheelHint.textContent = '最后一步，命运在抉择…';
+  shopWheelResult.innerHTML = '';
+  shopWheelResult.dataset.chosenIndex = '';
+
+  var n = shopWheelItems.length;
+  var targetIndex = Math.floor(Math.random() * n);
+  var targetItem = shopWheelItems[targetIndex];
+
+  var pointerAngle = -Math.PI / 2;
+  var sliceAngle = (2 * Math.PI) / n;
+  var targetSliceMid = targetIndex * sliceAngle + sliceAngle / 2;
+  var newBaseAngle = pointerAngle - targetSliceMid;
+
+  var currentNorm = ((shopWheelAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  var targetNorm = ((newBaseAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+  var fullRounds = Math.floor(shopWheelAngle / (2 * Math.PI));
+  var targetAngle = fullRounds * 2 * Math.PI + targetNorm;
+  if (targetAngle <= shopWheelAngle + 0.01) {
+    targetAngle += 2 * Math.PI;
+  }
+
+  var extraTurns = (5 + Math.floor(Math.random() * 4)) * 2 * Math.PI;
+  targetAngle += extraTurns;
+
+  var startAngle = shopWheelAngle;
+  var totalDelta = targetAngle - startAngle;
+  var duration = 3200 + Math.random() * 800;
+  var startTime = performance.now();
+
+  function animate(now) {
+    var elapsed = now - startTime;
+    var progress = Math.min(elapsed / duration, 1.0);
+    var eased = 1 - Math.pow(1 - progress, 4);
+    var currentAngle = startAngle + totalDelta * eased;
+    shopWheelAngle = currentAngle;
+    drawShopWheel(currentAngle);
+
+    if (progress < 1.0) {
+      shopSpinAnimId = requestAnimationFrame(animate);
+    } else {
+      shopWheelAngle = currentAngle;
+      isShopSpinning = false;
+      shopSpinAnimId = null;
+      btnShopSpin.textContent = '✅ 就这家了！';
+      btnShopSpin.disabled = false;
+      shopWheelHint.textContent = '点击外面关闭，查看最终结果～';
+
+      // 始终使用 targetIndex 获取结果，确保视觉与数据一致
+      shopWheelResult.innerHTML =
+        '<div class="result-name">🏪 ' + targetItem.name + '</div>' +
+        '<div class="result-addr">📍 ' + targetItem.address + '</div>';
+      shopWheelResult.style.animation = 'none';
+      void shopWheelResult.offsetWidth;
+      shopWheelResult.style.animation = 'popCelebrate 0.5s cubic-bezier(0.68,-0.55,0.27,1.55)';
+      shopWheelResult.dataset.chosenIndex = targetIndex;
+    }
+  }
+
+  shopSpinAnimId = requestAnimationFrame(animate);
+}
+
+// 餐厅转盘事件
+shopWheelOverlay.addEventListener('click', function(e) {
+  if (e.target === shopWheelOverlay) {
+    var chosenIdx = shopWheelResult.dataset.chosenIndex;
+    hideShopWheel();
+    if (chosenIdx !== undefined && !isShopSpinning) {
+      var chosen = shopWheelItems[parseInt(chosenIdx)];
+      showFinalRestaurant(chosen);
+    }
+  }
+});
+
+btnShopSpin.addEventListener('click', function() {
+  if (isShopSpinning) return;
+  var chosenIdx = shopWheelResult.dataset.chosenIndex;
+  if (chosenIdx !== undefined && btnShopSpin.textContent.indexOf('就这家了') >= 0) {
+    // 用户点击"就这家了"→ 关闭并显示最终结果
+    var chosen = shopWheelItems[parseInt(chosenIdx)];
+    hideShopWheel();
+    showFinalRestaurant(chosen);
+  } else {
+    spinShopWheel();
+  }
+});
+
+// ==================== 第二阶段 ====================
+function goToPhase2(foodId) {
+  var food = FOOD_LIST.find(function(f) { return f.id === foodId; });
+  if (!food) {
+    console.error('[今天吃啥] ❌ goToPhase2 收到无效 foodId:', foodId);
+    return;
+  }
+
+  // 【关键验证日志】确认传给地图搜索的关键词绝对正确
+  console.log(
+    '[今天吃啥] 🚀 进入第二阶段:',
+    'foodId=' + foodId,
+    '| label=' + food.label,
+    '| emoji=' + food.emoji,
+    '| 即将搜索周边「' + food.label + '」餐厅'
+  );
+
+  chosenFoodId = foodId;
+
+  // 更新步骤指示器
+  stepDot1.classList.remove('active');
+  stepDot1.classList.add('done');
+  stepDot2.classList.add('active');
+  stepLine.classList.add('done');
+
+  // 隐藏第一阶段
+  phase1Card.style.display = 'none';
+
+  // 填充 hero
+  resultEmoji.textContent = food.emoji;
+  resultName.textContent = food.label;
+  resultTagline.textContent = food.tagline;
+
+  // 显示第二阶段
+  phase2Card.style.display = '';
+  phase2Card.style.animation = 'none';
+  void phase2Card.offsetWidth;
+  phase2Card.style.animation = 'fadeInUp 0.6s ease-out';
+
+  // 滚动到第二阶段
+  phase2Card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // 撒花效果
+  spawnConfetti();
+
+  // 展示加载界面 & 开始定位+搜索
+  showPanelLoading();
+
+  // 启动高德地图定位 → 搜索流程
+  startLocationAndSearch(food);
+}
+
+function showPanelLoading() {
+  phase2Panel.innerHTML =
+    '<div class="loading-row">' +
+      '📍 正在获取你的位置…' +
+      '<span class="loading-dots"><span></span><span></span><span></span></span>' +
+    '</div>';
+}
+
+function showPanelSearching(foodLabel) {
+  phase2Panel.innerHTML =
+    '<div class="loading-row">' +
+      '🔍 正在搜索附近的 <strong>' + foodLabel + '</strong>…' +
+      '<span class="loading-dots"><span></span><span></span><span></span></span>' +
+    '</div>';
+}
+
+function showPanelError(msg, food) {
+  phase2Panel.innerHTML =
+    '<div class="status-msg">' +
+      '<span class="status-icon">😢</span>' +
+      '<div class="status-text">' + msg + '</div>' +
+      '<button class="btn-sm" onclick="retrySearch()">🔄 重试</button>' +
+    '</div>';
+}
+
+function showPanelShopList(shops) {
+  var html = '<div class="shop-list">';
+  shops.forEach(function(shop, i) {
+    var distKm = (shop.distance / 1000).toFixed(1);
+    html +=
+      '<div class="shop-item">' +
+        '<div class="shop-rank">' + (i + 1) + '</div>' +
+        '<div class="shop-info">' +
+          '<div class="shop-name">' + shop.name + '</div>' +
+          '<div class="shop-addr">📍 ' + shop.address + '</div>' +
+        '</div>' +
+        '<div class="shop-dist">' + distKm + 'km</div>' +
+      '</div>';
+  });
+  html += '</div>';
+  html +=
+    '<button class="btn-sm" style="margin-top:4px;" onclick="retrySearch()">🔄 换一批</button>';
+  phase2Panel.innerHTML = html;
+}
+
+function showFinalRestaurant(shop) {
+  var distKm = (shop.distance / 1000).toFixed(1);
+  phase2Panel.innerHTML =
+    '<div class="final-restaurant">' +
+      '<div class="final-icon">🏪</div>' +
+      '<div class="final-name">' + shop.name + '</div>' +
+      '<div class="final-addr">📍 ' + shop.address + '</div>' +
+      '<div class="final-dist">距离约 ' + distKm + ' 公里</div>' +
+    '</div>';
+
+  // 二次撒花
+  spawnConfetti();
+}
+
+function retrySearch() {
+  var food = FOOD_LIST.find(function(f) { return f.id === chosenFoodId; });
+  if (food) {
+    showPanelLoading();
+    startLocationAndSearch(food);
+  }
+}
+
+// ==================== 高德地图：定位 + POI 搜索 ====================
+function startLocationAndSearch(food) {
+  loadAmapSDK().then(function() {
+    showPanelSearching(food.label);
+
+    // 如果用户手动设置了城市，直接用城市名搜索
+    if (locationMode === 'manual' && manualCoords) {
+      console.log('[今天吃啥] 📍 使用手动城市: ' + manualCityName, '坐标:', manualCoords.lng.toFixed(4), manualCoords.lat.toFixed(4));
+      showPanelSearching(food.label + '（' + manualCityName + '）');
+      doPOISearch(food, manualCoords.lng, manualCoords.lat);
+      return;
+    }
+
+    // 如果已检测到坐标，直接使用
+    if (detectedCoords) {
+      console.log('[今天吃啥] 📍 使用已检测坐标:', detectedCoords.lng.toFixed(4), detectedCoords.lat.toFixed(4));
+      showPanelSearching(food.label + '（' + (detectedCity || '已定位') + '）');
+      doPOISearch(food, detectedCoords.lng, detectedCoords.lat);
+      return;
+    }
+
+    // 否则重新定位
+    doGeolocation(food);
+  }).catch(function(err) {
+    console.error('[今天吃啥] SDK 加载失败:', err);
+    showPanelError('高德地图加载失败：' + err.message + '<br>请检查网络后重试', food);
+  });
+}
+
+function updateLocationDisplay(cityName, coords, isAuto) {
+  detectedCity = cityName;
+  detectedCoords = coords;
+  if (isAuto && locationMode === 'manual') return; // 手动模式下不覆盖
+
+  var displayCity = cityName || '未知城市';
+  locCityDisplay.textContent = displayCity;
+  // 如果只是IP城市定位（非精确GPS），加个提示色
+  if (isAuto && cityName && detectedCoords) {
+    locCityDisplay.classList.remove('is-warning');
+  } else if (isAuto && !cityName) {
+    locCityDisplay.classList.add('is-warning');
+  }
+  locationBar.classList.remove('manual');
+}
+
+function doGeolocation(food) {
+  console.log('[今天吃啥] 开始 AMap.Geolocation 定位...');
+  geolocation.getCurrentPosition(function(status, result) {
+    if (status === 'complete' && result && result.position) {
+      var lng = result.position.lng;
+      var lat = result.position.lat;
+      var city = result.addressComponent ? (result.addressComponent.city || result.addressComponent.province || '') : '';
+      console.log('[今天吃啥] AMap 定位成功:', lng.toFixed(4), lat.toFixed(4), result.formattedAddress || '');
+      updateLocationDisplay(city, {lng: lng, lat: lat}, true);
+      doPOISearch(food, lng, lat);
+    } else {
+      console.warn('[今天吃啥] AMap 定位失败 (status=' + status + ')，降级到浏览器原生定位');
+      tryNavigatorGeolocation(food);
+    }
+  });
+}
+
+function tryNavigatorGeolocation(food) {
+  if (!navigator.geolocation) {
+    console.warn('[今天吃啥] 浏览器不支持 Geolocation API，降级到 IP 城市定位');
+    fallbackToCitySearch(food);
+    return;
+  }
+
+  showPanelSearching(food.label);
+  console.log('[今天吃啥] 尝试 navigator.geolocation...');
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      console.log('[今天吃啥] 浏览器定位成功:', pos.coords.longitude.toFixed(4), pos.coords.latitude.toFixed(4));
+      detectedCoords = {lng: pos.coords.longitude, lat: pos.coords.latitude};
+      updateLocationDisplay('精确位置', detectedCoords, true);
+      doPOISearch(food, pos.coords.longitude, pos.coords.latitude);
+    },
+    function(err) {
+      console.warn('[今天吃啥] 浏览器定位失败 (code=' + err.code + ')，降级到 IP 城市定位');
+      fallbackToCitySearch(food);
+    },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+  );
+}
+
+function fallbackToCitySearch(food) {
+  console.log('[今天吃啥] 启动 AMap.CitySearch IP 城市定位...');
+  showPanelSearching(food.label);
+
+  citySearch.getLocalCity(function(status, result) {
+    if (status === 'complete' && result.info === 'OK' && result.rectangle) {
+      var parts = result.rectangle.split(';');
+      var sw = parts[0].split(',');
+      var ne = parts[1].split(',');
+      var lng = (parseFloat(sw[0]) + parseFloat(ne[0])) / 2;
+      var lat = (parseFloat(sw[1]) + parseFloat(ne[1])) / 2;
+      var city = result.city || '';
+
+      console.log('[今天吃啥] IP 城市定位成功:', city, result.province, '中心坐标:', lng.toFixed(4), lat.toFixed(4));
+      updateLocationDisplay(city, {lng: lng, lat: lat}, true);
+      showPanelSearching(food.label + '（已定位到 ' + city + '）');
+      doPOISearch(food, lng, lat);
+    } else {
+      console.error('[今天吃啥] IP 城市定位也失败了:', status, result);
+      locCityDisplay.textContent = '定位失败';
+      locCityDisplay.classList.add('is-warning');
+      showPanelError(
+        '无法获取你的位置 🥲<br>请确保网络连接正常<br>或点击顶部「✏️ 修改」手动输入城市名',
+        food
+      );
+    }
+  });
+}
+
+// ==================== 位置栏交互逻辑 ====================
+function enterEditMode() {
+  // 替换按钮为输入框
+  var currentVal = locationMode === 'manual' ? manualCityName : detectedCity;
+  locEditWrap.innerHTML =
+    '<input class="loc-input" id="locInput" type="text" placeholder="输入城市名，如 绵竹市" value="' + (currentVal || '') + '" autofocus>' +
+    '<button class="btn-loc-confirm" id="btnLocConfirm" title="确认">✓</button>' +
+    '<button class="btn-loc-reset" id="btnLocReset">恢复自动</button>';
+
+  var input = document.getElementById('locInput');
+  var btnConfirm = document.getElementById('btnLocConfirm');
+  var btnReset = document.getElementById('btnLocReset');
+
+  // 回车确认
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') confirmCityInput(input.value.trim());
+    if (e.key === 'Escape') cancelEditMode();
+  });
+
+  btnConfirm.addEventListener('click', function() {
+    confirmCityInput(input.value.trim());
+  });
+
+  btnReset.addEventListener('click', function() {
+    resetToAutoLocation();
+  });
+
+  // 自动聚焦
+  setTimeout(function() { input.focus(); input.select(); }, 100);
+}
+
+function confirmCityInput(cityName) {
+  if (!cityName) {
+    cancelEditMode();
+    return;
+  }
+
+  console.log('[今天吃啥] 🏙️ 用户手动输入城市:', cityName);
+
+  // 使用 Geocoder 将城市名转为坐标
+  locCityDisplay.textContent = '查询中…';
+  locCityDisplay.classList.remove('is-warning');
+
+  geocoder.getLocation(cityName, function(status, result) {
+    if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
+      var geo = result.geocodes[0];
+      manualCityName = geo.city || geo.district || geo.township || cityName;
+      manualCoords = { lng: geo.location.lng, lat: geo.location.lat };
+      locationMode = 'manual';
+
+      console.log('[今天吃啥] ✅ 城市地理编码成功:', manualCityName, '坐标:', manualCoords.lng.toFixed(4), manualCoords.lat.toFixed(4));
+
+      // 更新显示
+      locCityDisplay.textContent = manualCityName;
+      locCityDisplay.classList.remove('is-warning');
+      locationBar.classList.add('manual');
+
+      // 还原按钮
+      locEditWrap.innerHTML = '<button class="btn-loc-edit" id="btnLocEdit">✏️ 修改</button>';
+      document.getElementById('btnLocEdit').addEventListener('click', enterEditMode);
+    } else {
+      console.error('[今天吃啥] ❌ 城市地理编码失败:', cityName, status, result);
+      locCityDisplay.textContent = '未找到「' + cityName + '」';
+      locCityDisplay.classList.add('is-warning');
+      // 尝试用 province + city 组合搜索
+      geocoder.getLocation('四川省' + cityName, function(s2, r2) {
+        if (s2 === 'complete' && r2.geocodes && r2.geocodes.length > 0) {
+          var geo2 = r2.geocodes[0];
+          manualCityName = geo2.city || geo2.district || cityName;
+          manualCoords = { lng: geo2.location.lng, lat: geo2.location.lat };
+          locationMode = 'manual';
+          console.log('[今天吃啥] ✅ 省份前缀地理编码成功:', manualCityName);
+          locCityDisplay.textContent = manualCityName;
+          locCityDisplay.classList.remove('is-warning');
+          locationBar.classList.add('manual');
+          locEditWrap.innerHTML = '<button class="btn-loc-edit" id="btnLocEdit">✏️ 修改</button>';
+          document.getElementById('btnLocEdit').addEventListener('click', enterEditMode);
+        } else {
+          cancelEditMode();
+        }
+      });
+    }
+  });
+}
+
+function cancelEditMode() {
+  locEditWrap.innerHTML = '<button class="btn-loc-edit" id="btnLocEdit">✏️ 修改</button>';
+  document.getElementById('btnLocEdit').addEventListener('click', enterEditMode);
+  // 恢复之前显示的城市名
+  if (locationMode === 'manual') {
+    locCityDisplay.textContent = manualCityName;
+  } else {
+    locCityDisplay.textContent = detectedCity || '未知';
+  }
+}
+
+function resetToAutoLocation() {
+  locationMode = 'auto';
+  manualCityName = '';
+  manualCoords = null;
+  locationBar.classList.remove('manual');
+  locCityDisplay.textContent = detectedCity || '重新定位中…';
+  locCityDisplay.classList.remove('is-warning');
+
+  // 还原按钮
+  locEditWrap.innerHTML = '<button class="btn-loc-edit" id="btnLocEdit">✏️ 修改</button>';
+  document.getElementById('btnLocEdit').addEventListener('click', enterEditMode);
+
+  console.log('[今天吃啥] 🔄 已恢复自动定位模式，城市:', detectedCity || '(待重新检测)');
+}
+
+// 高德 POI 类型编码映射（用于精准搜索和降级兜底）
+var AMAP_TYPE_MAP = {
+  hotpot:    '050400',  // 火锅
+  bbq:       '050600',  // 烧烤
+  fastfood:  '050300',  // 小吃快餐
+  chinese:   '050100',  // 中餐厅
+  sushi:     '050200',  // 外国餐厅
+  pizza:     '050200',  // 外国餐厅
+  taco:      '050200',  // 外国餐厅
+  pasta:     '050200',  // 外国餐厅
+  curry:     '050200',  // 外国餐厅
+  chicken:   '050300',  // 小吃快餐
+  noodle:    '050300',  // 小吃快餐 (米线属于小吃)
+  malatang:  '050300',  // 小吃快餐
+  bento:     '050300',  // 小吃快餐
+  dumpling:  '050300',  // 小吃快餐
+  salad:     '050100',  // 中餐厅 (轻食沙拉)
+};
+var AMAP_FALLBACK_TYPE = '050000'; // 餐饮服务（兜底）
+
+function doPOISearch(food, lng, lat) {
+  showPanelSearching(food.label);
+  var typeCode = AMAP_TYPE_MAP[food.id] || '';
+  console.log('[今天吃啥] 🔍 周边搜索开始:', food.label, '→ 类型码:', typeCode || '(无)', '坐标:', lng.toFixed(4), lat.toFixed(4));
+
+  // 第一级：用食物标签 + POI 类型码精准搜索
+  var searchOpts = { pageSize: 15, pageIndex: 1, citylimit: false };
+  if (typeCode) { searchOpts.type = typeCode; }
+
+  var search1 = new AMap.PlaceSearch(searchOpts);
+  search1.searchNearBy(food.label, [lng, lat], 5000, function(status, result) {
+    console.log('[今天吃啥] 第1级搜索(' + food.label + '+' + (typeCode || '无类型') + '): status=' + status + ', count=' + (result && result.poiInfo ? result.poiInfo.pois.length : 0));
+
+    if (status === 'complete' && result && result.poiInfo && result.poiInfo.pois.length > 0) {
+      processPoiResults(result.poiInfo.pois);
+      return;
+    }
+
+    // 第二级：只用食物标签（去掉类型码），扩大范围搜索
+    console.log('[今天吃啥] ⚡ 降级到第2级: 只用标签「' + food.label + '」无类型过滤');
+    var search2 = new AMap.PlaceSearch({ pageSize: 15, pageIndex: 1, citylimit: false });
+    search2.searchNearBy(food.label, [lng, lat], 5000, function(s2, r2) {
+      console.log('[今天吃啥] 第2级搜索: status=' + s2 + ', count=' + (r2 && r2.poiInfo ? r2.poiInfo.pois.length : 0));
+
+      if (s2 === 'complete' && r2 && r2.poiInfo && r2.poiInfo.pois.length > 0) {
+        processPoiResults(r2.poiInfo.pois);
+        return;
+      }
+
+      // 第三级：高德官方大分类兜底搜索（餐饮服务 050000）
+      console.log('[今天吃啥] ⚡ 降级到第3级: 餐饮服务大分类 050000 兜底');
+      var search3 = new AMap.PlaceSearch({ type: AMAP_FALLBACK_TYPE, pageSize: 15, pageIndex: 1, citylimit: false });
+      search3.searchNearBy('', [lng, lat], 5000, function(s3, r3) {
+        console.log('[今天吃啥] 第3级搜索(餐饮服务): status=' + s3 + ', count=' + (r3 && r3.poiInfo ? r3.poiInfo.pois.length : 0));
+
+        if (s3 === 'complete' && r3 && r3.poiInfo && r3.poiInfo.pois.length > 0) {
+          processPoiResults(r3.poiInfo.pois);
+          return;
+        }
+
+        // 第四级：直接用"餐厅"关键字最后尝试
+        console.log('[今天吃啥] ⚡ 降级到第4级: 关键字"餐厅"最终尝试');
+        var search4 = new AMap.PlaceSearch({ pageSize: 15, pageIndex: 1, citylimit: false });
+        search4.searchNearBy('餐厅', [lng, lat], 5000, function(s4, r4) {
+          console.log('[今天吃啥] 第4级搜索(餐厅): status=' + s4 + ', count=' + (r4 && r4.poiInfo ? r4.poiInfo.pois.length : 0));
+
+          if (s4 === 'complete' && r4 && r4.poiInfo && r4.poiInfo.pois.length > 0) {
+            processPoiResults(r4.poiInfo.pois);
+            return;
+          }
+
+          // 全部失败
+          console.error('[今天吃啥] ❌ 四级搜索全部无结果');
+          showPanelError(
+            '附近 5 公里内没找到餐厅 😢<br>'
+            + '搜索条件：「' + food.label + '」→ 餐饮服务 → 餐厅<br>'
+            + '试试换一个类别或扩大范围吧～',
+            food
+          );
+        });
+      });
+    });
+  });
+}
+
+function processPoiResults(pois) {
+  // 按距离排序，取前 5（或更少）
+  var sorted = pois
+    .filter(function(p) { return p.name && p.name.trim(); })
+    .sort(function(a, b) {
+      // 优先按距离排序
+      var da = a.distance !== undefined ? a.distance : 99999;
+      var db = b.distance !== undefined ? b.distance : 99999;
+      return da - db;
+    });
+
+  var topShops = sorted.slice(0, 5).map(function(p) {
+    return {
+      name: p.name,
+      address: p.address || '地址未知',
+      distance: p.distance || 0,
+    };
+  });
+
+  if (topShops.length < 2) {
+    // 只有 1 家或 0 家
+    if (topShops.length === 1) {
+      // 只有一家，直接显示结果
+      showPanelShopList(topShops);
+      showFinalRestaurant(topShops[0]);
+      return;
+    }
+    showPanelError('附近没找到足够的餐厅，换个类别试试吧～', null);
+    return;
+  }
+
+  // 显示店铺清单 + 自动弹出餐厅转盘
+  showPanelShopList(topShops);
+  shopWheelItems = topShops;
+  setTimeout(function() {
+    showShopWheel();
+  }, 600);
+}
+
+// ==================== 返回第一阶段 ====================
+function goBackToPhase1() {
+  // 关闭可能开着的弹窗
+  hideFoodWheel();
+  hideShopWheel();
+
+  // 重置步骤指示器
+  stepDot1.classList.add('active');
+  stepDot1.classList.remove('done');
+  stepDot2.classList.remove('active');
+  stepDot2.classList.remove('done');
+  stepLine.classList.remove('done');
+
+  // 清除选择
+  selectedIds.clear();
+  chosenFoodId = null;
+  shopWheelItems = [];
+  shopWheelResult.innerHTML = '';
+  shopWheelResult.dataset.chosenIndex = '';
+  updateConfirmButton();
+  renderFoodCards();
+
+  // 隐藏第二阶段，显示第一阶段
+  phase2Card.style.display = 'none';
+  phase1Card.style.display = '';
+  phase1Card.style.animation = 'none';
+  void phase1Card.offsetWidth;
+  phase1Card.style.animation = 'fadeInDown 0.5s ease-out';
+
+  // 滚动回顶部
+  document.querySelector('.title-block').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ==================== 撒花效果 ====================
+function spawnConfetti() {
+  var colors = ['#FF7B54', '#FFD93D', '#FFB5A7', '#7BC67E', '#FF9A76', '#FFE0B2', '#F9C7B7', '#5B8FF9', '#61DDAA'];
+  var container = document.body;
+
+  for (var i = 0; i < 60; i++) {
+    (function(delay, idx) {
+      setTimeout(function() {
+        var confetti = document.createElement('div');
+        var size = 6 + Math.random() * 10;
+        var x = Math.random() * window.innerWidth;
+        var color = colors[Math.floor(Math.random() * colors.length)];
+
+        Object.assign(confetti.style, {
+          position: 'fixed',
+          left: x + 'px',
+          top: '-20px',
+          width: size + 'px',
+          height: size * (0.4 + Math.random() * 0.8) + 'px',
+          background: color,
+          borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+          pointerEvents: 'none',
+          zIndex: '200',
+          opacity: '0.9',
+        });
+
+        container.appendChild(confetti);
+
+        var duration = 1800 + Math.random() * 2200;
+        var drift = (Math.random() - 0.5) * 300;
+
+        confetti.animate([
+          { transform: 'translateY(0) translateX(0) rotate(0deg)', opacity: 1 },
+          { transform: 'translateY(' + (window.innerHeight + 80) + 'px) translateX(' + drift + 'px) rotate(' + (Math.random() * 720) + 'deg)', opacity: 0 }
+        ], {
+          duration: duration,
+          easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          fill: 'forwards',
+        }).onfinish = function() { confetti.remove(); };
+      }, delay * 25);
+    })(i);
+  }
+}
+
+// ==================== 事件绑定 ====================
+btnConfirm.addEventListener('click', showFoodWheel);
+btnBack.addEventListener('click', goBackToPhase1);
+
+// ==================== 键盘快捷键 ====================
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    if (shopWheelOverlay.style.display === 'flex') {
+      var chosenIdx = shopWheelResult.dataset.chosenIndex;
+      hideShopWheel();
+      if (chosenIdx !== undefined && !isShopSpinning) {
+        var chosen = shopWheelItems[parseInt(chosenIdx)];
+        showFinalRestaurant(chosen);
+      }
+    } else if (wheelOverlay.style.display === 'flex') {
+      var resultId = wheelResult.dataset.foodId;
+      hideFoodWheel();
+      if (resultId && !isSpinning) {
+        goToPhase2(resultId);
+      }
+    }
+  }
+});
+
+// ==================== 预热高德 SDK + 初次城市检测 ====================
+// 页面加载时就开始加载 SDK，减少用户等待时间，同时检测城市显示在位置栏
+loadAmapSDK().then(function() {
+  console.log('[今天吃啥] 开始初始城市检测...');
+  citySearch.getLocalCity(function(status, result) {
+    if (status === 'complete' && result.info === 'OK') {
+      var city = result.city || result.province || '未知';
+      console.log('[今天吃啥] 初始城市检测:', city);
+      locCityDisplay.textContent = city;
+      detectedCity = city;
+      if (result.rectangle) {
+        var parts = result.rectangle.split(';');
+        var sw = parts[0].split(',');
+        var ne = parts[1].split(',');
+        detectedCoords = {
+          lng: (parseFloat(sw[0]) + parseFloat(ne[0])) / 2,
+          lat: (parseFloat(sw[1]) + parseFloat(ne[1])) / 2,
+        };
+      }
+    } else {
+      locCityDisplay.textContent = '未检测到';
+      locCityDisplay.classList.add('is-warning');
+    }
+  });
+}).catch(function() {
+  console.warn('高德地图 SDK 预加载失败，将在使用时重试');
+  locCityDisplay.textContent = 'SDK加载中…';
+});
+
+// 位置栏编辑按钮事件
+btnLocEdit.addEventListener('click', enterEditMode);
+
+// 全局点击：如果输入框失焦但没有确认，取消编辑
+document.addEventListener('click', function(e) {
+  var locInput = document.getElementById('locInput');
+  if (locInput && !locationBar.contains(e.target)) {
+    cancelEditMode();
+  }
+});
+
+// ==================== 启动 ====================
+renderFoodCards();
+updateConfirmButton();
+</script>
+</body>
+</html>
